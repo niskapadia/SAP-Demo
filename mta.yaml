@@ -1,0 +1,239 @@
+_schema-version: '2.0'
+ID: hana6.example
+version: 2.3.4
+modules:
+  - name: openSAP-ex-user-db
+    type: hdb
+    path: user_db
+    requires:
+      - name: user-container
+        properties:
+          TARGET_CONTAINER: '~{user-container-name}'
+  - name: openSAP-ex-core-db
+    type: hdb
+    path: core_db
+    requires:
+      - name: container
+        properties:
+          TARGET_CONTAINER: '~{container-name}'
+      - name: CrossSchemaService
+        group: SERVICE_REPLACEMENTS
+        properties:
+          key: hdi-sflight-service
+          service: '~{sflight-service-name}'
+      - name: user-container
+        group: SERVICE_REPLACEMENTS
+        properties:
+          key: hdi-user-service
+          service: '~{user-container-name}'
+      - name: openSAP-ex-user-db
+      - name: CentralDB
+        group: SERVICE_REPLACEMENTS
+        properties:
+          key: central-db-service
+          service: '~{central-db-name}'
+  - name: openSAP-ex-core-node
+    type: nodejs
+    path: core_node
+    parameters:
+      host: openSAP-core-node
+      register-service-url: true
+      service-name: openSAP-core-node
+      service-url: '${default-url}'
+      memory: 2G
+    properties:
+      UAA_SERVICE_NAME: openSAP-ex-uaa
+    provides:
+      - name: core_node_api
+        properties:
+          url: '${default-url}'
+    requires:
+      - name: openSAP-ex-uaa
+      - name: openSAP-ex-log
+      - name: container
+      - name: openSAP-ex-core-db
+      - name: sap.hana.democontent.epm.services.images
+      - name: CROSS_SCHEMA_SFLIGHT
+  - name: openSAP-ex-user-xsjs
+    type: nodejs
+    path: user_xsjs
+    parameters:
+      host: openSAP-user-xsjs
+      register-service-url: true
+      service-name: openSAP-user-xsjs
+      service-url: '${default-url}'
+    properties:
+      SAP_JWT_TRUST_ACL: '[{"clientid":"*","identityzone":"*"}]'
+    provides:
+      - name: user_xsjs_api
+        properties:
+          url: '${default-url}'
+    requires:
+      - name: openSAP-ex-uaa
+      - name: user-container
+      - name: openSAP-ex-user-db
+  - name: openSAP-ex-core-xsjs
+    type: nodejs
+    path: core_xsjs
+    provides:
+      - name: core_xsjs_api
+        properties:
+          url: '${default-url}'
+    parameters:
+      host: openSAP-core-xsjs
+      register-service-url: true
+      service-name: openSAP-core-xsjs
+      service-url: '${default-url}'
+    requires:
+      - name: openSAP-ex-uaa
+      - name: container
+      - name: openSAP-ex-core-db
+      - name: sap.hana.democontent.epm.services.images
+      - name: CROSS_SCHEMA_SFLIGHT
+  - name: openSAP-ex-web
+    type: html5
+    path: web
+    provides:
+      - name: web
+        properties:
+          ui-url: '${default-url}'
+    parameters:
+      host: openSAP-web
+      register-service-url: true
+      service-name: openSAP-web
+      service-url: '${default-url}'
+    requires:
+      - name: openSAP-ex-uaa
+      - name: openSAP-ui5
+      - name: core_node_api
+        group: destinations
+        properties:
+          name: core-node-backend
+          url: '~{url}'
+          forwardAuthToken: true
+      - name: core_xsjs_api
+        group: destinations
+        properties:
+          name: core-xsjs-backend
+          url: '~{url}'
+          forwardAuthToken: true
+      - name: user_xsjs_api
+        group: destinations
+        properties:
+          name: user-backend
+          url: '~{url}'
+          forwardAuthToken: true
+resources:
+  - name: user-container
+    properties:
+      user-container-name: '${service-name}'
+    type: com.sap.xs.hdi-container
+    parameters:
+      config:
+        schema: OPENSAP_USER_EXAMPLE
+  - name: container
+    properties:
+      container-name: '${service-name}'
+    type: com.sap.xs.hdi-container
+    parameters:
+      config:
+        schema: OPENSAP_EXAMPLE
+  - name: openSAP-ex-uaa
+    type: com.sap.xs.uaa
+    parameters:
+      config:
+        xsappname: openSAP-ex
+        attributes:
+          - name: client
+            description: Session Client
+            valueType: int
+          - name: country
+            description: Country
+            valueType: s         
+        scopes:
+          - name: $XSAPPNAME.JOBSCHEDULER
+            description: Job Scheduler Scope
+            grant-as-authority-to-apps:
+              - jobscheduler
+          - name: $XSAPPNAME.Display
+            description: display
+          - name: $XSAPPNAME.Create
+            description: create
+          - name: $XSAPPNAME.Edit
+            description: edit
+          - name: $XSAPPNAME.Delete
+            description: delete
+          - name: $XSAPPNAME.DataGenerator
+            description: data generator
+          - name: xs_authorization.read
+            description: Read authorization information from UAA
+          - name: xs_authorization.write
+            description: Write authorization information to UAA
+        role-templates:
+          - name: Admin
+            description: refapps administrator
+            scope-references:
+              - $XSAPPNAME.Display
+              - $XSAPPNAME.Edit
+              - $XSAPPNAME.Delete
+              - $XSAPPNAME.DataGenerator
+              - $XSAPPNAME.Create
+              - $XSAPPNAME.JOBSCHEDULER
+              - xs_controller.read
+              - xs_authorization.read
+              - xs_authorization.writen
+          - name: Viewer
+            description: Viewer
+            scope-references:
+              - $XSAPPNAME.Display
+            attribute-referernces:
+              - client
+              - country
+          - name: Editor
+            description: Edit and Delete records
+            scope-references:
+              - $XSAPPNAME.Display
+              - $XSAPPNAME.Edit
+              - $XSAPPNAME.Delete
+              - $XSAPPNAME.Create
+              - $XSAPPNAME.DataGenerator
+              - $XSAPPNAME.JOBSCHEDULER
+              - xs_controller.read
+              - xs_authorization.read
+              - xs_authorization.writen
+            attribute-referernces:
+              - client
+  - name: openSAP-ex-scheduler
+    type: com.sap.xs.job-scheduler
+  - name: sap.hana.democontent.epm.services.images
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: sap.hana.democontent.epm.services.images
+    properties:
+      xshttpdest-images-service-name: '${service-name}'
+  - name: CrossSchemaService
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: CROSS_SCHEMA_SFLIGHT
+    properties:
+      sflight-service-name: '${service-name}'
+  - name: CROSS_SCHEMA_SFLIGHT
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: CROSS_SCHEMA_SFLIGHT
+  - name: openSAP-ui5
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: sapui5_sb
+      service-plan: sapui5-1.52
+  - name: openSAP-ex-log
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: auditlog
+      service-plan: free
+  - name: CentralDB
+    type: org.cloudfoundry.existing-service
+    parameters:
+      service-name: openSAP.CentralDB.opensap-central-container
+    properties:
+      central-db-name: '${service-name}'
